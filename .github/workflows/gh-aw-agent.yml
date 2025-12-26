@@ -1,0 +1,56 @@
+name: GH AW Agent
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  implement_issue:
+    if: contains(github.event.comment.body, '/gh aw')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create implementation
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+            const issueTitle = issue.data.title;
+            const issueBody = issue.data.body;
+            const branchName = `feature/issue-${context.issue.number}`;
+            const fileName = `issue-${context.issue.number}.md`;
+
+            await github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `refs/heads/${branchName}`,
+              sha: context.sha
+            });
+
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: fileName,
+              message: `Implement issue #${context.issue.number}: ${issueTitle}`,
+              content: Buffer.from(`# ${issueTitle}\n\n${issueBody}`).toString('base64'),
+              branch: branchName
+            });
+
+            await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Implement issue #${context.issue.number}: ${issueTitle}`,
+              head: branchName,
+              base: 'main',
+              body: `This PR implements issue #${context.issue.number}.`
+            });
